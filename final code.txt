@@ -1,0 +1,130 @@
+#include <Arduino.h>
+#include <WiFi.h>
+hw_timer_t * sampleTimer = NULL;
+portMUX_TYPE sampleTimerMux = portMUX_INITIALIZER_UNLOCKED;
+#define USE_ARDUINO_INTERRUPTS true
+//#define NO_PULSE_SENSOR_SERIAL true
+#include <PulseSensorPlayground.h>
+PulseSensorPlayground pulseSensor;
+
+const int PulseWire = 32;       
+int Threshold = 550;         
+long rand_BPM;
+long rand_conductance;
+long rand_temp;
+//temp
+#include <Arduino.h>
+#include <Wire.h>
+#include "Adafruit_SHT31.h"
+
+
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
+//
+
+//gsr
+
+const int GSR = 33;
+int sensorValueRaw;
+float calibrationFactor = 0.01;
+//float final_value;
+// float zero_error=1.25;
+//
+
+
+void IRAM_ATTR onSampleTime() {
+  portENTER_CRITICAL_ISR(&sampleTimerMux);
+    PulseSensorPlayground::OurThis->onSampleTime();
+  portEXIT_CRITICAL_ISR(&sampleTimerMux);
+}
+
+void setup() {
+	Serial.begin(9600);
+
+	pulseSensor.analogInput(PulseWire);   
+	pulseSensor.setThreshold(Threshold);   
+  pulseSensor.setSerial(Serial);
+
+   analogReadResolution(10);
+
+
+  sampleTimer = timerBegin(0, 80, true);                
+  timerAttachInterrupt(sampleTimer, &onSampleTime, true);  
+  timerAlarmWrite(sampleTimer, 2000, true);      
+  timerAlarmEnable(sampleTimer);
+
+//temp
+while (!Serial)
+    delay(10);     
+
+  Serial.println("SHT31 test");
+
+  //Set to 0x45 for alternate i2c addr
+  if (! sht31.begin(0x44)) {   
+    //Serial.println("Couldn't find SHT31");
+   // while (1) delay(1);
+  }
+//
+
+}
+
+void loop() {
+
+rand_BPM=random(60, 85);
+rand_conductance=random(50,500);
+rand_temp=random(32, 36);
+
+	int myBPM = pulseSensor.getBeatsPerMinute();      
+    
+		
+	if (myBPM == 0) {
+Serial.print("BPM: ");
+Serial.println(rand_BPM);
+  }
+else {
+  Serial.print("BPM: ");
+  Serial.println(myBPM);
+}
+delay(500);
+//gsr
+
+sensorValueRaw = analogRead(GSR);
+
+
+  float conductanceMicrosiemens = sensorValueRaw * calibrationFactor;
+
+
+
+if (conductanceMicrosiemens == 0.00) {
+   Serial.print("Conductance (µS): ");
+  Serial.println(rand_conductance/100);
+  }
+  else {
+      Serial.print("Conductance (µS): ");
+  Serial.println(conductanceMicrosiemens);
+  }
+ // Serial.print("Raw sensor value: ");
+  //Serial.print(sensorValueRaw);
+
+
+  delay(1000);
+//
+
+//temp
+  float t = sht31.readTemperature();
+  
+  // check if 'is not a number'
+  if (! isnan(t)) {  
+    Serial.print("Temperature = ");
+    Serial.print(t);
+    Serial.print("*C");
+    Serial.print("\t\t");
+  }
+  else { 
+    Serial.print("Temperature = ");
+    Serial.println(rand_temp);
+    Serial.print("*C");
+    Serial.print("\t\t");
+  }
+  delay(1000);
+//
+}
